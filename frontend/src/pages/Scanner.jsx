@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Html5Qrcode } from "html5-qrcode";
 
@@ -6,6 +6,10 @@ function Scanner() {
   const [todayCount, setTodayCount] = useState(0);
   const [scannerActive, setScannerActive] = useState(false);
   const [toast, setToast] = useState(null);
+  const [cameraList, setCameraList] = useState([]);
+  const [selectedCamera, setSelectedCamera] = useState(null);
+  const [showCameraPicker, setShowCameraPicker] = useState(false);
+  const html5QrCodeRef = useRef(null);
 
   // Fetch today's count from the server
   const fetchTodayCount = async () => {
@@ -35,54 +39,73 @@ function Scanner() {
     }
   }, [toast]);
 
-  // Scanner setup – only when scannerActive is true
+  // Scanner setup – only when scannerActive is true and selectedCamera is set
   useEffect(() => {
-    if (!scannerActive) return;
+    if (!scannerActive || !selectedCamera) return;
 
     const html5QrCode = new Html5Qrcode("reader");
+    html5QrCodeRef.current = html5QrCode;
 
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length) {
-          const cameraId = devices[0].id;
-
-          html5QrCode.start(
-            cameraId,
-            {
-              fps: 10,
-              qrbox: {
-                width: 320,
-                height: 320,
-              },
-              aspectRatio: 9 / 16,
-            },
-            async (decodedText) => {
-              try {
-                await axios.post(
-                  "https://qr-attendance-backend-kc31.onrender.com/api/attendance/mark",
-                  {
-                    studentId: decodedText,
-                    subject: "AI&DS",
-                  }
-                );
-                setTodayCount((prev) => prev + 1);
-                showToast("Attendance Marked", "success");
-              } catch (error) {
-                showToast(
-                  error?.response?.data?.message || "Attendance Mark Failed",
-                  "error"
-                );
+    html5QrCode
+      .start(
+        selectedCamera,
+        {
+          fps: 10,
+          qrbox: { width: 320, height: 320 },
+          aspectRatio: 9 / 16,
+        },
+        async (decodedText) => {
+          try {
+            await axios.post(
+              "https://qr-attendance-backend-kc31.onrender.com/api/attendance/mark",
+              {
+                studentId: decodedText,
+                subject: "AI&DS",
               }
-            }
-          );
+            );
+            setTodayCount((prev) => prev + 1);
+            showToast("Attendance Marked", "success");
+          } catch (error) {
+            showToast(
+              error?.response?.data?.message || "Attendance Mark Failed",
+              "error"
+            );
+          }
         }
-      })
+      )
       .catch(console.error);
 
     return () => {
       html5QrCode.stop().catch(() => {});
     };
-  }, [scannerActive]);
+  }, [scannerActive, selectedCamera]);
+
+  // Toggle scanner: stop if active, else check cameras
+  const handleStartStop = async () => {
+    if (scannerActive) {
+      // Stop scanner
+      setScannerActive(false);
+      setSelectedCamera(null);
+      return;
+    }
+
+    // Start: get available cameras
+    try {
+      const devices = await Html5Qrcode.getCameras();
+      if (devices.length === 1) {
+        // Only one camera: start directly
+        setSelectedCamera(devices[0].id);
+        setScannerActive(true);
+      } else {
+        // Multiple cameras: show picker
+        setCameraList(devices);
+        setShowCameraPicker(true);
+      }
+    } catch (err) {
+      console.error("No cameras found", err);
+      showToast("No camera available", "error");
+    }
+  };
 
   return (
     <>
@@ -398,6 +421,65 @@ function Scanner() {
         </div>
       )}
 
+      {/* Camera selection popup */}
+      {showCameraPicker && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              width: 320,
+              background: "#111",
+              borderRadius: 20,
+              padding: 20,
+              border: "1px solid rgba(255,255,255,0.15)",
+            }}
+          >
+            <h3
+              style={{
+                color: "white",
+                textAlign: "center",
+                marginBottom: 15,
+              }}
+            >
+              Select Camera
+            </h3>
+
+            {cameraList.map((camera) => (
+              <button
+                key={camera.id}
+                onClick={() => {
+                  setSelectedCamera(camera.id);
+                  setShowCameraPicker(false);
+                  setScannerActive(true);
+                }}
+                style={{
+                  width: "100%",
+                  marginBottom: 10,
+                  height: 50,
+                  borderRadius: 12,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  background: "#2c2c2e",
+                  color: "white",
+                }}
+              >
+                {camera.label || "Camera"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Bottom action bar – premium glass dock */}
       <div
         style={{
@@ -451,7 +533,7 @@ function Scanner() {
 
         {/* Start / Stop Toggle */}
         <button
-          onClick={() => setScannerActive(!scannerActive)}
+          onClick={handleStartStop}
           style={{
             flex: 1,
             height: 56,

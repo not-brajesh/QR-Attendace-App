@@ -10,7 +10,9 @@ function Scanner() {
   // Fetch today's count from the server
   const fetchTodayCount = async () => {
     try {
-      const res = await axios.get("http://localhost:8000/api/attendance/today");
+      const res = await axios.get(
+        "https://qr-attendance-backend-kc31.onrender.com/api/attendance/today"
+      );
       setTodayCount(res.data.count || res.data.attendance?.length || 0);
     } catch (error) {
       console.error("Failed to fetch today's attendance:", error);
@@ -56,10 +58,13 @@ function Scanner() {
             },
             async (decodedText) => {
               try {
-                await axios.post("http://localhost:8000/api/attendance/mark", {
-                  studentId: decodedText,
-                  subject: "AI&DS",
-                });
+                await axios.post(
+                  "https://qr-attendance-backend-kc31.onrender.com/api/attendance/mark",
+                  {
+                    studentId: decodedText,
+                    subject: "AI&DS",
+                  }
+                );
                 setTodayCount((prev) => prev + 1);
                 showToast("Attendance Marked", "success");
               } catch (error) {
@@ -418,7 +423,7 @@ function Scanner() {
         <button
           onClick={() =>
             window.open(
-              "http://localhost:8000/api/attendance/export/today",
+              "https://qr-attendance-backend-kc31.onrender.com/api/attendance/export/today",
               "_blank"
             )
           }
@@ -476,7 +481,7 @@ function Scanner() {
         <button
           onClick={() =>
             window.open(
-              "http://localhost:8000/api/attendance/export/all",
+              "https://qr-attendance-backend-kc31.onrender.com/api/attendance/export/all",
               "_blank"
             )
           }
